@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="te"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Viral Videos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap">
+<style>
+:root{--bg:#FFF4E6;--ink:#1D1036;--mute:#6B5E80;--card:#fff;--hot:#FF3D6E;--sun:#FFC933;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{--bg:#1A0F2E;--ink:#FFF4E6;--mute:#B7A8D0;--card:#2A1B47;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.45}
+.wrap{max-width:980px;margin:0 auto;padding:18px 16px 40px}
+.logo{font-weight:800;font-size:1.25rem}
+.logo i{font-style:normal;background:var(--hot);color:#fff;padding:2px 8px;border-radius:8px;margin-right:4px;display:inline-block;transform:rotate(-4deg)}
+h1{font-size:clamp(2.6rem,12vw,5.4rem);line-height:.92;letter-spacing:-.04em;font-weight:800;margin:28px 0 12px}
+h1 span{display:block;color:var(--hot)}
+.sub{color:var(--mute);margin:0 0 20px;font-size:1.05rem}
+h2{font-size:1.5rem;margin:30px 0 14px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(min-width:720px){.grid{grid-template-columns:repeat(3,1fr);gap:16px}}
+.card{background:var(--card);border:2px solid var(--ink);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.thumb{aspect-ratio:16/10;display:grid;place-items:center;font-size:1.6rem;position:relative}
+.thumb em{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.65);color:#fff;font-style:normal;font-size:.72rem;padding:2px 6px;border-radius:6px}
+.info{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;flex:1}
+.info h3{margin:0;font-size:.98rem}
+.row{display:flex;justify-content:space-between;align-items:center;margin-top:auto;gap:6px}
+.price{font-weight:800;font-size:1.1rem}
+.btn{background:var(--sun);color:#1D1036;border:2px solid #1D1036;font:inherit;font-weight:800;padding:6px 12px;border-radius:12px;cursor:pointer;box-shadow:2px 2px 0 #1D1036}
+.btn:disabled{opacity:.6}
+#player{display:none;position:fixed;inset:0;background:rgba(10,4,24,.92);z-index:9;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:16px}
+#player video{width:100%;max-width:900px;max-height:75vh;border-radius:12px;background:#000}
+#msg{color:var(--mute);font-size:.9rem;margin-top:10px;min-height:1.2em}
+</style></head><body>
+<div class="wrap">
+  <div class="logo"><i>Viral</i>Videos</div>
+  <h1>Viral<span>Videos</span></h1>
+  <p class="sub">Pay, watch, done. No login needed.</p>
+  <h2>All videos</h2>
+  <div class="grid" id="grid"></div>
+  <div id="msg"></div>
+</div>
+<div id="player">
+  <video id="vid" controls playsinline controlslist="nodownload"></video>
+  <button class="btn" type="button" id="close">Close</button>
+</div>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+var grid=document.getElementById("grid"),msg=document.getElementById("msg"),player=document.getElementById("player"),vid=document.getElementById("vid");
+function saved(id){try{var s=JSON.parse(localStorage.getItem("vv_"+id));if(s&&s.exp>Date.now())return s.url}catch(e){}return null}
+function save(id,url,sec){try{localStorage.setItem("vv_"+id,JSON.stringify({url:url,exp:Date.now()+sec*1000-60000}))}catch(e){}}
+function play(url){vid.src=url;player.style.display="flex";vid.play().catch(function(){})}
+document.getElementById("close").onclick=function(){vid.pause();vid.removeAttribute("src");player.style.display="none"};
+function say(t){msg.textContent=t}
+async function unlock(v,btn){
+  var url=saved(v.id);if(url){play(url);return}
+  btn.disabled=true;say("");
+  try{
+    var o=await (await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({videoId:v.id})})).json();
+    if(!o.orderId)throw 0;
+    new Razorpay({key:o.key,amount:o.amount,currency:"INR",order_id:o.orderId,name:"Viral Videos",description:v.title,
+      handler:async function(r){
+        say("Verifying payment...");
+        var d=await (await fetch("/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({videoId:v.id,orderId:r.razorpay_order_id,paymentId:r.razorpay_payment_id,signature:r.razorpay_signature})})).json();
+        if(d.url){save(v.id,d.url,d.expiresIn);say("");play(d.url)}else say("Payment verify avvaledu. Support ni contact cheyandi.");
+        btn.disabled=false},
+      modal:{ondismiss:function(){btn.disabled=false}}}).open();
+  }catch(e){say("Edo tappu jarigindi, malli try cheyandi.");btn.disabled=false}
+}
+fetch("/api/order").then(function(r){return r.json()}).then(function(list){
+  list.forEach(function(v){
+    var g=v.g.split(","),c=document.createElement("div");c.className="card";
+    c.innerHTML='<div class="thumb" style="background:linear-gradient(135deg,'+g[0]+','+g[1]+')"><span>🔒</span><em>'+v.duration+'</em></div><div class="info"><h3></h3><div class="row"><span class="price">₹'+v.price+'</span><button class="btn" type="button">Unlock</button></div></div>';
+    c.querySelector("h3").textContent=v.title;
+    var b=c.querySelector("button");b.onclick=function(){unlock(v,b)};
+    grid.appendChild(c)})
+}).catch(function(){say("Videos load avvaledu.")});
+</script></body></html>
